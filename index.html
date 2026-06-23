@@ -255,6 +255,14 @@
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
       Upload Excel
     </div>
+    <div class="nav-item" data-page="kmlmap">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+      KML Map
+    </div>
+    <div class="nav-item" data-page="kml">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+      KML / Map Layers
+    </div>
   </nav>
   <div class="sidebar-footer">
     <p>Wells & Meters Report v2.0</p>
@@ -352,18 +360,23 @@
 
       <!-- MAP -->
       <div class="map-card">
-        <div class="map-header">
+        <div class="map-header" style="flex-wrap:wrap;gap:10px">
           <div>
-            <div class="card-title" style="margin-bottom:0">Well Locations Map</div>
+            <div class="card-title" style="margin-bottom:0">Well & Meter Locations Map</div>
             <div style="font-size:12px;color:var(--text2);margin-top:3px">
               <span class="dot dot-green"></span> Active &nbsp;
-              <span class="dot dot-amber"></span> Non-Active
+              <span class="dot dot-amber"></span> Non-Active &nbsp;
+              <span class="dot" style="background:#6366F1"></span> KML Layer &nbsp;
+              <span class="dot" style="background:#EF4444"></span> Out of Scope
             </div>
           </div>
-          <div class="map-filters">
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <div style="font-size:11px;font-weight:700;color:var(--slate);align-self:center">EXCEL:</div>
             <button class="map-filter-btn all-filter active" onclick="filterMap('all',this)">All Wells</button>
-            <button class="map-filter-btn active-filter" onclick="filterMap('Active',this)">Active Only</button>
-            <button class="map-filter-btn inactive-filter" onclick="filterMap('Non-Active',this)">Non-Active Only</button>
+            <button class="map-filter-btn active-filter" onclick="filterMap('Active',this)">Active</button>
+            <button class="map-filter-btn inactive-filter" onclick="filterMap('Non-Active',this)">Non-Active</button>
+            <div style="font-size:11px;font-weight:700;color:var(--slate);align-self:center;margin-left:4px">KML:</div>
+            <button class="map-filter-btn" id="kml-toggle-btn" onclick="toggleKmlLayer(this)" style="background:var(--navy);color:white;border-color:var(--navy)">Hide KML</button>
           </div>
         </div>
         <div id="map"></div>
@@ -496,6 +509,47 @@
       </div>
     </div>
 
+    <!-- KML MAP PAGE -->
+    <div class="page" id="page-kmlmap">
+      <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="map-filters" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="map-filter-btn all-filter active" onclick="kmlFilter('all',this)">All (320)</button>
+          <button class="map-filter-btn" style="--fc:#10B981" onclick="kmlFilter('active',this)">
+            <span class="dot" style="background:#10B981"></span> Active Wells (88)
+          </button>
+          <button class="map-filter-btn" onclick="kmlFilter('non_active',this)">
+            <span class="dot" style="background:#F59E0B"></span> Non-Active (40)
+          </button>
+          <button class="map-filter-btn" onclick="kmlFilter('meter',this)">
+            <span class="dot" style="background:#3B82F6"></span> Meters (100)
+          </button>
+          <button class="map-filter-btn" onclick="kmlFilter('rehab_required',this)">
+            <span class="dot" style="background:#EF4444"></span> Rehab Required (14)
+          </button>
+          <button class="map-filter-btn" onclick="kmlFilter('out_of_scope',this)">
+            <span class="dot" style="background:#9CA3AF"></span> Out of Scope (78)
+          </button>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="document.getElementById('kml-file-input').click()">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width:15px;height:15px"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            Upload KML/KMZ
+          </button>
+          <input type="file" id="kml-file-input" accept=".kml,.kmz" style="display:none" onchange="handleKMLUpload(this.files[0])">
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="kml-map" style="height:600px"></div>
+      </div>
+      <div style="margin-top:16px;display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+        <div class="stat-card"><div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div><div><div class="stat-label">Active Wells</div><div class="stat-val" style="font-size:22px">88</div></div></div>
+        <div class="stat-card"><div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div><div><div class="stat-label">Non-Active</div><div class="stat-val" style="font-size:22px">40</div></div></div>
+        <div class="stat-card"><div class="stat-icon navy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></div><div><div class="stat-label">Meters</div><div class="stat-val" style="font-size:22px">100</div></div></div>
+        <div class="stat-card"><div class="stat-icon red"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div><div><div class="stat-label">Rehab Required</div><div class="stat-val" style="font-size:22px">14</div></div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#F1F5F9;color:#9CA3AF"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div><div><div class="stat-label">Out of Scope</div><div class="stat-val" style="font-size:22px">78</div></div></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -515,6 +569,7 @@
 <div id="toast">✓ <span id="toast-msg"></span></div>
 
 <script src="data.js"></script>
+<script src="kml_data.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
