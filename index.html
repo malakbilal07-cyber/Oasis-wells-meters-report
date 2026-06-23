@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADVACON — Wells & Meters Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:    #0B1F3A;
+    --navy2:   #122847;
+    --teal:    #00A99D;
+    --teal2:   #007F76;
+    --sky:     #E8F7F6;
+    --amber:   #F59E0B;
+    --red:     #EF4444;
+    --green:   #10B981;
+    --slate:   #64748B;
+    --light:   #F1F5F9;
+    --border:  #E2E8F0;
+    --white:   #FFFFFF;
+    --text:    #1E293B;
+    --text2:   #475569;
+    --sidebar-w: 240px;
+  }
+
+  body { font-family: 'Inter', sans-serif; background: var(--light); color: var(--text); display: flex; min-height: 100vh; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-w); min-height: 100vh; background: var(--navy);
+    display: flex; flex-direction: column; position: fixed; left: 0; top: 0; z-index: 100;
+  }
+  .brand { padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .brand-logo { display: flex; align-items: center; gap: 10px; }
+  .brand-icon { width: 38px; height: 38px; background: var(--teal); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .brand-icon svg { width: 22px; height: 22px; fill: white; }
+  .brand-name { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: white; letter-spacing: .5px; }
+  .brand-sub { font-size: 10px; color: rgba(255,255,255,.45); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+  nav { flex: 1; padding: 16px 0; }
+  .nav-section { padding: 8px 16px 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,.3); font-weight: 600; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer;
+    color: rgba(255,255,255,.65); font-size: 14px; font-weight: 500; transition: all .15s; border-left: 3px solid transparent; }
+  .nav-item:hover { background: rgba(255,255,255,.06); color: white; }
+  .nav-item.active { background: rgba(0,169,157,.15); color: var(--teal); border-left-color: var(--teal); }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,.1); }
+  .sidebar-footer p { font-size: 11px; color: rgba(255,255,255,.3); }
+
+  /* ── MAIN ── */
+  #main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    height: 64px; background: white; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; position: sticky; top: 0; z-index: 50;
+  }
+  .topbar-title { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; color: var(--text); }
+  .topbar-actions { display: flex; align-items: center; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--teal); color: white; }
+  .btn-primary:hover { background: var(--teal2); }
+  .btn-outline { background: white; color: var(--text); border: 1.5px solid var(--border); }
+  .btn-outline:hover { border-color: var(--teal); color: var(--teal); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn svg { width: 15px; height: 15px; }
+
+  /* ── CONTENT ── */
+  #content { padding: 28px; flex: 1; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── STAT CARDS ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: white; border-radius: 14px; padding: 20px 22px; border: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 14px; }
+  .stat-icon { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .stat-icon svg { width: 22px; height: 22px; }
+  .stat-icon.teal   { background: #E6F7F6; color: var(--teal); }
+  .stat-icon.green  { background: #D1FAE5; color: var(--green); }
+  .stat-icon.amber  { background: #FEF3C7; color: var(--amber); }
+  .stat-icon.red    { background: #FEE2E2; color: var(--red); }
+  .stat-icon.navy   { background: #E0EAF5; color: var(--navy); }
+  .stat-label { font-size: 12px; color: var(--text2); font-weight: 500; margin-bottom: 4px; }
+  .stat-val { font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--slate); margin-top: 4px; }
+
+  /* ── CHARTS ROW ── */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .card { background: white; border-radius: 14px; border: 1px solid var(--border); padding: 20px; }
+  .card-title { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+  .card-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  canvas { max-height: 180px; }
+
+  /* ── DETAILED SUMMARY TABLE ── */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary-table th { background: var(--light); padding: 9px 12px; text-align: left; font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .8px; color: var(--slate); border-bottom: 2px solid var(--border); }
+  .summary-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  .summary-table tr:last-child td { border-bottom: none; font-weight: 700; background: var(--sky); }
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; gap: 4px; }
+  .badge-green  { background: #D1FAE5; color: #065F46; }
+  .badge-red    { background: #FEE2E2; color: #991B1B; }
+  .badge-amber  { background: #FEF3C7; color: #92400E; }
+  .badge-navy   { background: #DBEAFE; color: #1E3A5F; }
+  .badge-gray   { background: #F1F5F9; color: #475569; }
+
+  /* ── MAP ── */
+  .map-card { background: white; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 24px; }
+  .map-header { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .map-filters { display: flex; gap: 8px; }
+  .map-filter-btn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: white;
+    font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 5px; }
+  .map-filter-btn.active-filter { background: var(--teal); color: white; border-color: var(--teal); }
+  .map-filter-btn.inactive-filter.active { background: var(--amber); color: white; border-color: var(--amber); }
+  .map-filter-btn.all-filter.active { background: var(--navy); color: white; border-color: var(--navy); }
+  #map { height: 420px; }
+
+  /* ── DATA TABLES ── */
+  .table-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .search-input { padding: 8px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px;
+    font-family: inherit; outline: none; width: 260px; transition: border .15s; }
+  .search-input:focus { border-color: var(--teal); }
+  select.filter-select { padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 13px; font-family: inherit; outline: none; cursor: pointer; background: white; }
+  select.filter-select:focus { border-color: var(--teal); }
+  .table-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--border); background: white; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table thead th { background: var(--light); padding: 11px 14px; text-align: left; font-size: 11px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--slate); border-bottom: 2px solid var(--border); white-space: nowrap; }
+  table.data-table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.data-table tbody tr:last-child td { border-bottom: none; }
+  table.data-table tbody tr:hover { background: #F8FAFC; }
+  table.data-table tbody tr.new-row td { background: #ECFDF5; }
+  .action-btns { display: flex; gap: 6px; }
+  .pagination { display: flex; align-items: center; gap: 8px; justify-content: flex-end; padding: 14px 16px;
+    font-size: 13px; color: var(--text2); border-top: 1px solid var(--border); }
+  .page-btn { padding: 5px 11px; border-radius: 6px; border: 1.5px solid var(--border); background: white; cursor: pointer; font-size: 13px; }
+  .page-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .page-btn.active { background: var(--teal); color: white; border-color: var(--teal); }
+
+  /* ── ADD NEW / FORMS ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 12px; font-weight: 600; color: var(--text2); }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+    font-size: 13px; font-family: inherit; outline: none; transition: border .15s; }
+  .form-group input:focus, .form-group select:focus { border-color: var(--teal); }
+  .form-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .tab-switcher { display: flex; gap: 4px; background: var(--light); padding: 4px; border-radius: 10px; width: fit-content; margin-bottom: 24px; }
+  .tab-btn { padding: 8px 20px; border-radius: 7px; border: none; background: transparent;
+    font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text2); transition: all .15s; }
+  .tab-btn.active { background: white; color: var(--teal); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+  /* ── MODAL ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000;
+    align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: 16px; padding: 28px; width: 640px; max-width: 95vw;
+    max-height: 90vh; overflow-y: auto; position: relative; }
+  .modal-title { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+  .modal-close { position: absolute; top: 20px; right: 20px; background: var(--light); border: none;
+    width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; display: flex;
+    align-items: center; justify-content: center; color: var(--text2); }
+  .modal-close:hover { background: var(--border); }
+
+  /* ── UPLOAD AREA ── */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 40px; text-align: center;
+    cursor: pointer; transition: all .15s; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--teal); background: var(--sky); }
+  .upload-zone svg { width: 40px; height: 40px; color: var(--teal); margin: 0 auto 12px; }
+  .upload-zone p { font-size: 14px; color: var(--text2); }
+  .upload-zone strong { color: var(--teal); }
+
+  /* ── TOAST ── */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--navy); color: white;
+    padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; opacity: 0;
+    transition: opacity .3s; z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 8px; }
+  #toast.show { opacity: 1; }
+
+  /* ── DOT LEGEND ── */
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: #10B981; }
+  .dot-amber { background: #F59E0B; }
+
+  /* section heading */
+  .section-heading { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 14px; color: var(--text); }
+
+  /* reason breakdown */
+  .reason-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+  .reason-bar-fill { height: 8px; border-radius: 4px; background: var(--teal); }
+  .reason-bar-label { min-width: 180px; color: var(--text2); }
+  .reason-bar-count { font-weight: 700; color: var(--text); min-width: 28px; text-align: right; }
+
+  @media (max-width: 1100px) {
+    .stats-grid { grid-template-columns: repeat(2,1fr); }
+    .charts-row { grid-template-columns: 1fr 1fr; }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar">
+  <div class="brand">
+    <div class="brand-logo">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">ADVACON</div>
+        <div class="brand-sub">Field Operations</div>
+      </div>
+    </div>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" data-page="dashboard">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-section" style="margin-top:8px">Data</div>
+    <div class="nav-item" data-page="wells">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93V18c0-.55.45-1 1-1s1 .45 1 1v1.93C10.43 19.71 9 18.21 8 16.5L9.5 15c.28.5.72.93 1.27 1.15.23.09.48.14.73.14V11H9V9h2V7.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V9h2v2h-2v5.29c.25 0 .5-.05.73-.14.55-.22.99-.65 1.27-1.15L17.5 16.5c-1 1.71-2.43 3.21-4.5 3.43z"/></svg>
+      Wells
+    </div>
+    <div class="nav-item" data-page="meters">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5zm0 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h10c1.65 0 3 1.35 3 3s-1.35 3-3 3zm-1-3c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/></svg>
+      Electrical Meters
+    </div>
+    <div class="nav-section" style="margin-top:8px">Actions</div>
+    <div class="nav-item" data-page="add">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      Add Record
+    </div>
+    <div class="nav-item" data-page="upload">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+      Upload Excel
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <p>Wells & Meters Report v2.0</p>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div id="main">
+  <header id="topbar">
+    <div class="topbar-title" id="page-title">Dashboard</div>
+    <div class="topbar-actions">
+      <button class="btn btn-outline" onclick="exportPDF()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z"/></svg>
+        Export PDF
+      </button>
+      <button class="btn btn-primary" onclick="showPage('add')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        Add New
+      </button>
+    </div>
+  </header>
+
+  <div id="content">
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon navy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Total Wells</div><div class="stat-val" id="stat-total-wells">—</div><div class="stat-sub">in database</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Active Wells</div><div class="stat-val" id="stat-active-wells">—</div><div class="stat-sub" id="stat-active-pct">—</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Non-Active Wells</div><div class="stat-val" id="stat-inactive-wells">—</div><div class="stat-sub" id="stat-inactive-pct">—</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></div>
+          <div><div class="stat-label">Total Meters</div><div class="stat-val" id="stat-total-meters">—</div><div class="stat-sub" id="stat-meters-working">—</div></div>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card">
+          <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+          <div><div class="stat-label">Maintained Wells</div><div class="stat-val" id="stat-maintained">—</div><div class="stat-sub">rehabilitation status</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
+          <div><div class="stat-label">Not Maintained</div><div class="stat-val" id="stat-not-maintained">—</div><div class="stat-sub">rehabilitation status</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></div>
+          <div><div class="stat-label">Working Meters</div><div class="stat-val" id="stat-meters-ok">—</div><div class="stat-sub" id="stat-meters-ok-pct">—</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
+          <div><div class="stat-label">Faulty Meters</div><div class="stat-val" id="stat-meters-bad">—</div><div class="stat-sub" id="stat-meters-bad-pct">—</div></div>
+        </div>
+      </div>
+
+      <!-- DETAILED SUMMARY -->
+      <div class="summary-grid" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-title">Wells — Detailed Summary</div>
+          <table class="summary-table">
+            <thead><tr><th>Maintenance</th><th>Active</th><th>Non-Active</th><th>Total</th><th>Rehab Done</th><th>Rehab Req.</th></tr></thead>
+            <tbody id="summary-wells-body"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">Disconnection Reasons</div>
+          <div id="reason-breakdown"></div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-title">Wells Status</div>
+          <canvas id="chart-wells-status"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Rehabilitation Status</div>
+          <canvas id="chart-rehab"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Meter Status</div>
+          <canvas id="chart-meters-status"></canvas>
+        </div>
+      </div>
+
+      <!-- MAP -->
+      <div class="map-card">
+        <div class="map-header">
+          <div>
+            <div class="card-title" style="margin-bottom:0">Well Locations Map</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:3px">
+              <span class="dot dot-green"></span> Active &nbsp;
+              <span class="dot dot-amber"></span> Non-Active
+            </div>
+          </div>
+          <div class="map-filters">
+            <button class="map-filter-btn all-filter active" onclick="filterMap('all',this)">All Wells</button>
+            <button class="map-filter-btn active-filter" onclick="filterMap('Active',this)">Active Only</button>
+            <button class="map-filter-btn inactive-filter" onclick="filterMap('Non-Active',this)">Non-Active Only</button>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <!-- WELLS PAGE -->
+    <div class="page" id="page-wells">
+      <div class="table-toolbar">
+        <input class="search-input" id="wells-search" placeholder="Search well ID, meter, reason…" oninput="renderWellsTable()">
+        <select class="filter-select" id="wells-status-filter" onchange="renderWellsTable()">
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Non-Active">Non-Active</option>
+        </select>
+        <select class="filter-select" id="wells-rehab-filter" onchange="renderWellsTable()">
+          <option value="">All Rehab States</option>
+          <option value="Maintained">Maintained</option>
+          <option value="Not Maintained">Not Maintained</option>
+        </select>
+        <button class="btn btn-outline" onclick="exportWellsCSV()">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Well ID</th><th>Latitude</th><th>Longitude</th>
+              <th>Status</th><th>Rehab Status</th><th>Dist. to Meter (m)</th>
+              <th>Depth (m)</th><th>Water (m)</th><th>Disconnection Reason</th>
+              <th>Connected Meter</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="wells-tbody"></tbody>
+        </table>
+        <div class="pagination" id="wells-pagination"></div>
+      </div>
+    </div>
+
+    <!-- METERS PAGE -->
+    <div class="page" id="page-meters">
+      <div class="table-toolbar">
+        <input class="search-input" id="meters-search" placeholder="Search serial number, well…" oninput="renderMetersTable()">
+        <select class="filter-select" id="meters-status-filter" onchange="renderMetersTable()">
+          <option value="">All Statuses</option>
+          <option value="Working">Working</option>
+          <option value="Not working">Not Working</option>
+        </select>
+        <button class="btn btn-outline" onclick="exportMetersCSV()">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Serial Number</th><th>Input Voltage</th><th>Output Voltage</th>
+              <th>Amperes</th><th>Breaker Cap.</th><th>Status</th>
+              <th>Connected Well</th><th>Disconnection Reason</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="meters-tbody"></tbody>
+        </table>
+        <div class="pagination" id="meters-pagination"></div>
+      </div>
+    </div>
+
+    <!-- ADD RECORD PAGE -->
+    <div class="page" id="page-add">
+      <div class="tab-switcher">
+        <button class="tab-btn active" onclick="switchAddTab('well',this)">New Well</button>
+        <button class="tab-btn" onclick="switchAddTab('meter',this)">New Meter</button>
+      </div>
+      <div class="card" style="max-width:700px">
+        <div id="add-well-form">
+          <div class="card-title">Add New Well</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Well ID *</label><input id="aw-id" placeholder="e.g. 208"></div>
+            <div class="form-group"><label>Well Status</label><select id="aw-status"><option>Active</option><option>Non-Active</option></select></div>
+            <div class="form-group"><label>Latitude</label><input id="aw-lat" placeholder="26.xxxxx" type="number" step="any"></div>
+            <div class="form-group"><label>Longitude</label><input id="aw-lng" placeholder="37.xxxxx" type="number" step="any"></div>
+            <div class="form-group"><label>Rehabilitation Status</label><select id="aw-rehab"><option>Maintained</option><option>Not Maintained</option></select></div>
+            <div class="form-group"><label>Distance to Meter (m)</label><input id="aw-dist" type="number" step="any"></div>
+            <div class="form-group"><label>Total Depth (m)</label><input id="aw-depth" type="number" step="any"></div>
+            <div class="form-group"><label>Amount of Water (m)</label><input id="aw-water" type="number" step="any"></div>
+            <div class="form-group" style="grid-column:1/-1"><label>Connected Meter Serial</label><input id="aw-meter" placeholder="e.g. MMF2020807240744"></div>
+            <div class="form-group" style="grid-column:1/-1"><label>Reason of Disconnection</label><input id="aw-reason" placeholder="If non-active, state reason"></div>
+          </div>
+          <div class="form-actions" style="margin-top:18px">
+            <button class="btn btn-primary" onclick="addWell()">Save Well</button>
+            <button class="btn btn-outline" onclick="clearWellForm()">Clear</button>
+          </div>
+        </div>
+        <div id="add-meter-form" style="display:none">
+          <div class="card-title">Add New Meter</div>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1"><label>Serial Number *</label><input id="am-serial" placeholder="e.g. MMF2020807240999"></div>
+            <div class="form-group"><label>Input Voltage</label><input id="am-input" type="number"></div>
+            <div class="form-group"><label>Output Voltage</label><input id="am-output" type="number"></div>
+            <div class="form-group"><label>Amperes</label><input id="am-amp" type="number"></div>
+            <div class="form-group"><label>Breaker Capacity</label><input id="am-breaker" type="number"></div>
+            <div class="form-group"><label>Status</label><select id="am-status"><option>Working</option><option>Not working</option></select></div>
+            <div class="form-group"><label>Connected Well No.</label><input id="am-well" placeholder="e.g. 19"></div>
+            <div class="form-group" style="grid-column:1/-1"><label>Reason of Disconnection</label><input id="am-reason"></div>
+          </div>
+          <div class="form-actions" style="margin-top:18px">
+            <button class="btn btn-primary" onclick="addMeter()">Save Meter</button>
+            <button class="btn btn-outline" onclick="clearMeterForm()">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPLOAD PAGE -->
+    <div class="page" id="page-upload">
+      <div class="card" style="max-width:600px">
+        <div class="card-title">Upload New Excel File</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Upload an updated Excel file (.xlsx) to replace the current data. The file must have the same structure: a <strong>Wells</strong> sheet and an <strong>Electrical Meter &amp; Wells</strong> sheet with headers at row 4.</p>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 13h6m-3-3v6M3.6 19A2 2 0 0 1 2 17V7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v6M12 11v.01" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p><strong>Click to browse</strong> or drag &amp; drop your .xlsx file here</p>
+          <p style="font-size:11px;margin-top:6px;color:var(--slate)">Only .xlsx files are supported</p>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFileUpload(this.files[0])">
+        <div id="upload-status" style="margin-top:16px;font-size:13px;display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" id="modal-title">Edit Record</div>
+    <div id="modal-form-content"></div>
+    <div class="form-actions" style="margin-top:20px">
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast">✓ <span id="toast-msg"></span></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
