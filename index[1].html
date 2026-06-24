@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ADVACON — Active Farms Maintenance Project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0B2B5E;--navy2:#0D3470;--teal:#00A99D;--teal2:#007F76;
+  --sky:#E8F7F6;--amber:#F59E0B;--red:#EF4444;--green:#10B981;
+  --slate:#64748B;--light:#F1F5F9;--border:#E2E8F0;--white:#fff;
+  --text:#1E293B;--text2:#475569;--sidebar-w:260px;
+}
+body{font-family:'Inter',sans-serif;background:var(--light);color:var(--text);min-height:100vh}
+
+/* ── LOGIN ── */
+#login-screen{
+  position:fixed;inset:0;background:linear-gradient(135deg,#0B2B5E 0%,#0D3470 50%,#00A99D 100%);
+  display:flex;align-items:center;justify-content:center;z-index:9999;
+}
+.login-card{
+  background:white;border-radius:20px;padding:40px;width:420px;max-width:95vw;
+  box-shadow:0 25px 60px rgba(0,0,0,.35);
+}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo img{height:70px;object-fit:contain}
+.login-title{font-family:"Space Grotesk",sans-serif;font-size:20px;font-weight:700;text-align:center;color:var(--navy);margin-bottom:4px}
+.login-sub{font-size:12px;color:var(--slate);text-align:center;margin-bottom:28px;line-height:1.5}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.login-field input{
+  width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;
+  font-size:14px;font-family:inherit;outline:none;transition:border .15s;
+}
+.login-field input:focus{border-color:var(--teal)}
+.login-btn{
+  width:100%;padding:13px;background:var(--navy);color:white;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s;margin-top:4px;
+}
+.login-btn:hover{background:var(--teal)}
+.login-error{color:var(--red);font-size:12px;text-align:center;margin-top:10px;display:none}
+.login-footer{font-size:11px;color:var(--slate);text-align:center;margin-top:20px;line-height:1.5}
+
+/* ── APP ── */
+#app{display:none;min-height:100vh;display:flex;flex-direction:column}
+#app.visible{display:flex}
+
+/* ── TOPBAR ── */
+#topbar{
+  background:var(--navy);height:68px;display:flex;align-items:center;
+  padding:0 24px;gap:16px;position:sticky;top:0;z-index:200;
+  box-shadow:0 2px 12px rgba(0,0,0,.25);
+}
+.topbar-logo{display:flex;align-items:center;gap:12px}
+.topbar-logo img{height:42px;object-fit:contain;filter:brightness(0) invert(1)}
+.topbar-divider{width:1px;height:32px;background:rgba(255,255,255,.2)}
+.topbar-project{
+  font-size:11px;color:rgba(255,255,255,.7);line-height:1.4;max-width:320px;
+}
+.topbar-project strong{display:block;font-size:13px;color:white;font-weight:600}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar-user{
+  display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.8);font-size:13px;
+  padding:6px 12px;background:rgba(255,255,255,.1);border-radius:8px;
+}
+.topbar-user svg{width:16px;height:16px}
+.logout-btn{
+  padding:7px 14px;background:rgba(255,255,255,.15);color:white;border:1.5px solid rgba(255,255,255,.25);
+  border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;
+}
+.logout-btn:hover{background:var(--red);border-color:var(--red)}
+
+/* ── MAIN LAYOUT ── */
+#layout{display:flex;flex:1}
+
+/* ── SIDEBAR ── */
+#sidebar{
+  width:var(--sidebar-w);background:white;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:sticky;top:68px;height:calc(100vh - 68px);
+  overflow-y:auto;flex-shrink:0;
+}
+.nav-section{
+  padding:16px 20px 6px;font-size:10px;text-transform:uppercase;
+  letter-spacing:1.5px;color:var(--slate);font-weight:700;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;
+  color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;
+  border-left:3px solid transparent;
+}
+.nav-item:hover{background:var(--sky);color:var(--teal)}
+.nav-item.active{background:#EFF9F8;color:var(--teal);border-left-color:var(--teal);font-weight:600}
+.nav-item svg{width:17px;height:17px;flex-shrink:0}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border);margin-top:auto}
+.sidebar-footer p{font-size:11px;color:var(--slate)}
+
+/* ── CONTENT ── */
+#content{flex:1;padding:24px;overflow-x:hidden}
+.page{display:none}
+.page.active{display:block}
+.page-header{margin-bottom:22px}
+.page-header h1{font-family:"Space Grotesk",sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
+.page-header p{font-size:13px;color:var(--text2);margin-top:3px}
+
+/* ── PROJECT OVERVIEW ── */
+.overview-hero{
+  background:linear-gradient(135deg,var(--navy) 0%,#1a4a8a 100%);
+  border-radius:16px;padding:32px;color:white;margin-bottom:20px;position:relative;overflow:hidden;
+}
+.overview-hero::after{
+  content:'';position:absolute;right:-40px;top:-40px;width:200px;height:200px;
+  background:rgba(0,169,157,.2);border-radius:50%;
+}
+.overview-hero::before{
+  content:'';position:absolute;right:60px;bottom:-60px;width:150px;height:150px;
+  background:rgba(255,255,255,.05);border-radius:50%;
+}
+.overview-hero h2{font-family:"Space Grotesk",sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;position:relative;z-index:1}
+.overview-hero .tag{display:inline-block;background:var(--teal);color:white;font-size:10px;font-weight:700;
+  padding:3px 10px;border-radius:20px;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+.overview-hero p{font-size:13px;line-height:1.7;color:rgba(255,255,255,.85);position:relative;z-index:1;max-width:800px}
+
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.info-card{background:white;border-radius:12px;border:1px solid var(--border);padding:18px}
+.info-card-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.info-card-icon svg{width:20px;height:20px}
+.info-card h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--slate);margin-bottom:6px}
+.info-card p{font-size:13px;color:var(--text);line-height:1.5}
+
+.scope-card{background:white;border-radius:12px;border:1px solid var(--border);padding:22px;margin-bottom:20px}
+.scope-card h3{font-family:"Space Grotesk",sans-serif;font-size:15px;font-weight:700;margin-bottom:14px;color:var(--navy)}
+.scope-list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scope-item{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text2)}
+.scope-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;margin-top:5px}
+
+/* ── STAT CARDS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.stat-card{background:white;border-radius:12px;padding:18px 20px;border:1px solid var(--border);
+  display:flex;align-items:flex-start;gap:12px}
+.stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stat-icon svg{width:20px;height:20px}
+.stat-icon.teal{background:#E6F7F6;color:var(--teal)}
+.stat-icon.green{background:#D1FAE5;color:var(--green)}
+.stat-icon.amber{background:#FEF3C7;color:var(--amber)}
+.stat-icon.red{background:#FEE2E2;color:var(--red)}
+.stat-icon.navy{background:#DBEAFE;color:var(--navy)}
+.stat-label{font-size:11px;color:var(--text2);font-weight:500;margin-bottom:3px}
+.stat-val{font-family:"Space Grotesk",sans-serif;font-size:26px;font-weight:700;line-height:1}
+.stat-sub{font-size:11px;color:var(--slate);margin-top:3px}
+
+/* ── CHARTS ── */
+.charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
+.card{background:white;border-radius:12px;border:1px solid var(--border);padding:18px}
+.card-title{font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:700;margin-bottom:14px;color:var(--text)}
+canvas{max-height:180px}
+
+/* ── MAP ── */
+.map-card{background:white;border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+.map-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
+.map-filters{display:flex;gap:6px;flex-wrap:wrap}
+.mfbtn{
+  padding:6px 13px;border-radius:20px;border:1.5px solid var(--border);background:white;
+  font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;
+  font-family:inherit;color:var(--text2);
+}
+.mfbtn.on{border-color:currentColor}
+.mfbtn.f-active.on{background:#D1FAE5;color:#065F46;border-color:#10B981}
+.mfbtn.f-inactive.on{background:#FEF3C7;color:#92400E;border-color:#F59E0B}
+.mfbtn.f-kml.on{background:#DBEAFE;color:#1E40AF;border-color:#3B82F6}
+.mfbtn.f-scope.on{background:#F1F5F9;color:#374151;border-color:#9CA3AF}
+.mfbtn.f-rehab.on{background:#FEE2E2;color:#991B1B;border-color:#EF4444}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+#main-map{height:500px}
+.map-legend{padding:10px 18px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;background:#FAFAFA}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
+
+/* ── SUMMARY TABLE ── */
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.summary-table{width:100%;border-collapse:collapse;font-size:13px}
+.summary-table th{background:var(--light);padding:9px 12px;text-align:left;font-weight:700;font-size:10px;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--slate);border-bottom:2px solid var(--border)}
+.summary-table td{padding:9px 12px;border-bottom:1px solid var(--border)}
+.summary-table tr:last-child td{border-bottom:none;font-weight:700;background:var(--sky)}
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;gap:4px}
+.badge-green{background:#D1FAE5;color:#065F46}
+.badge-red{background:#FEE2E2;color:#991B1B}
+.badge-amber{background:#FEF3C7;color:#92400E}
+.badge-navy{background:#DBEAFE;color:#1E3A5F}
+.badge-gray{background:#F1F5F9;color:#475569}
+
+/* ── DATA TABLES ── */
+.table-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.search-input{padding:8px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;
+  font-family:inherit;outline:none;width:250px;transition:border .15s}
+.search-input:focus{border-color:var(--teal)}
+select.filter-select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:inherit;outline:none;cursor:pointer;background:white}
+select.filter-select:focus{border-color:var(--teal)}
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);background:white}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px}
+table.data-table thead th{background:var(--light);padding:10px 14px;text-align:left;font-size:10px;
+  font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--slate);
+  border-bottom:2px solid var(--border);white-space:nowrap}
+table.data-table tbody td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.data-table tbody tr:last-child td{border-bottom:none}
+table.data-table tbody tr:hover{background:#F8FAFC}
+table.data-table tbody tr.new-row td{background:#ECFDF5}
+.action-btns{display:flex;gap:5px}
+.pagination{display:flex;align-items:center;gap:6px;justify-content:flex-end;padding:12px 16px;
+  font-size:12px;color:var(--text2);border-top:1px solid var(--border)}
+.page-btn{padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:white;cursor:pointer;font-size:12px}
+.page-btn:hover{border-color:var(--teal);color:var(--teal)}
+.page-btn.active{background:var(--teal);color:white;border-color:var(--teal)}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;
+  font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;font-family:inherit}
+.btn-primary{background:var(--teal);color:white}
+.btn-primary:hover{background:var(--teal2)}
+.btn-outline{background:white;color:var(--text);border:1.5px solid var(--border)}
+.btn-outline:hover{border-color:var(--teal);color:var(--teal)}
+.btn-danger{background:var(--red);color:white}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn svg{width:14px;height:14px}
+
+/* ── FORMS ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-group label{font-size:12px;font-weight:600;color:var(--text2)}
+.form-group input,.form-group select{
+  padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:13px;font-family:inherit;outline:none;transition:border .15s}
+.form-group input:focus,.form-group select:focus{border-color:var(--teal)}
+.form-actions{display:flex;gap:10px;margin-top:8px}
+.tab-switcher{display:flex;gap:4px;background:var(--light);padding:4px;border-radius:10px;width:fit-content;margin-bottom:20px}
+.tab-btn{padding:7px 18px;border-radius:7px;border:none;background:transparent;
+  font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);transition:all .15s;font-family:inherit}
+.tab-btn.active{background:white;color:var(--teal);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
+  align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:16px;padding:26px;width:640px;max-width:95vw;
+  max-height:90vh;overflow-y:auto;position:relative}
+.modal-title{font-family:"Space Grotesk",sans-serif;font-size:17px;font-weight:700;margin-bottom:18px}
+.modal-close{position:absolute;top:18px;right:18px;background:var(--light);border:none;
+  width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;
+  align-items:center;justify-content:center;color:var(--text2)}
+
+/* ── UPLOAD ── */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:36px;text-align:center;
+  cursor:pointer;transition:all .15s}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--teal);background:var(--sky)}
+.upload-zone svg{width:36px;height:36px;color:var(--teal);margin:0 auto 10px}
+.upload-zone p{font-size:13px;color:var(--text2)}
+
+/* ── REASON BAR ── */
+.reason-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px}
+.reason-bar-fill{height:7px;border-radius:4px;background:var(--teal)}
+.reason-bar-label{min-width:160px;color:var(--text2);font-size:11px}
+.reason-bar-count{font-weight:700;color:var(--text);min-width:24px;text-align:right}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:22px;right:22px;background:var(--navy);color:white;
+  padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;
+  transition:opacity .3s;z-index:9999;pointer-events:none;display:flex;align-items:center;gap:7px}
+#toast.show{opacity:1}
+
+/* KML page */
+#kml-map{height:560px}
+.kml-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
+
+@media(max-width:1100px){
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .charts-row{grid-template-columns:1fr 1fr}
+  .summary-grid{grid-template-columns:1fr}
+  .info-grid{grid-template-columns:1fr 1fr}
+  .kml-stats{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:700px){
+  #sidebar{display:none}
+  .info-grid{grid-template-columns:1fr}
+  .scope-list{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="data:image/webp;base64,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" alt="ADVACON">
+    </div>
+    <div class="login-title">Active Farms Maintenance Project</div>
+    <div class="login-sub">Phase II — Cultural Oasis District<br>Authorized Personnel Only</div>
+    <div class="login-field">
+      <label>Username</label>
+      <input type="text" id="login-user" placeholder="Enter username" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="login-pass" placeholder="Enter password" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error">Incorrect username or password. Please try again.</div>
+    <div class="login-footer">
+      ADVACON — Advanced Concepts Contracting Co. Ltd.<br>
+      CW5773 · RCU Framework Agreement
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="topbar-logo">
+      <img src="data:image/webp;base64,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" alt="ADVACON">
+      <div class="topbar-divider"></div>
+      <div class="topbar-project">
+        <strong>Active Farms Maintenance Project — Phase II</strong>
+        Cultural Oasis District · AlUla · CW5773
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-user">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <span id="topbar-username">User</span>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Sign Out</button>
+    </div>
+  </header>
+
+  <div id="layout">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" data-page="overview">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        Project Overview
+      </div>
+      <div class="nav-item" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-section">Field Data</div>
+      <div class="nav-item" data-page="mapview">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+        Well &amp; Meter Map
+      </div>
+      <div class="nav-item" data-page="wells">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        Wells
+      </div>
+      <div class="nav-item" data-page="meters">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+        Electrical Meters
+      </div>
+      <div class="nav-section">Actions</div>
+      <div class="nav-item" data-page="add">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        Add Record
+      </div>
+      <div class="nav-item" data-page="upload">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+        Upload Excel
+      </div>
+      <div class="sidebar-footer">
+        <p>ADVACON Field Report v2.1</p>
+        <p style="margin-top:2px">Phase II · AlUla</p>
+      </div>
+    </aside>
+
+    <!-- CONTENT -->
+    <div id="content">
+
+      <!-- PROJECT OVERVIEW PAGE -->
+      <div class="page active" id="page-overview">
+        <div class="overview-hero">
+          <div class="tag">Phase II · Active</div>
+          <h2>ACTIVE FARMS MAINTENANCE PROJECT — PHASE II</h2>
+          <p>Aims to secure and improve the health of the farms and to engage the community in restarting farming activities to contribute to the achievement of the vision for the transformation of the Cultural Oasis District. This project covers a <strong>1,000 ha area</strong> of the Cultural Oasis and will cover the nominated areas detailed in the AlUla Cultural Oasis Detailed Masterplan.</p>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="info-card-icon" style="background:#EFF9F8"><svg viewBox="0 0 24 24" fill="var(--teal)"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+            <h4>Location</h4>
+            <p>Cultural Oasis District, AlUla — covering 1,000 hectares of nominated farmland</p>
+          </div>
+          <div class="info-card">
+            <div class="info-card-icon" style="background:#DBEAFE"><svg viewBox="0 0 24 24" fill="var(--navy)"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg></div>
+            <h4>Contract Reference</h4>
+            <p>CW5773 — Natural Reserves &amp; Horticulture Plant Nurseries Development and Operation</p>
+          </div>
+          <div class="info-card">
+            <div class="info-card-icon" style="background:#D1FAE5"><svg viewBox="0 0 24 24" fill="var(--green)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></div>
+            <h4>Framework</h4>
+            <p>RCU &amp; ADVACON — Advanced Concept for Contracting Co. Ltd. (Phase II)</p>
+          </div>
+        </div>
+
+        <div class="scope-card">
+          <h3>Development Areas &amp; Scope of Works</h3>
+          <div class="scope-list">
+            <div class="scope-item"><div class="scope-dot"></div><span>Slow Food Farms</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Oasis Living Farms</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Ecolodge &amp; HRH Initiative</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Summer Farms</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Perspective Galleries</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Life and Memory Galleries</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Hotel and Residences</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Private Farms</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Restoring and maintaining existing tree crop health</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Improving agricultural land management</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Improving existing irrigation practices</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Community engagement in farming activities</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Supply &amp; supervision of human resources</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Vehicles, machinery, tools &amp; equipment</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Agricultural inputs management</span></div>
+            <div class="scope-item"><div class="scope-dot"></div><span>Water well &amp; meter maintenance</span></div>
+          </div>
+        </div>
+
+        <!-- Mini stats on overview -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon navy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+            <div><div class="stat-label">Total Wells</div><div class="stat-val" id="ov-wells">—</div><div class="stat-sub">in database</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+            <div><div class="stat-label">Active Wells</div><div class="stat-val" id="ov-active">—</div><div class="stat-sub" id="ov-active-pct">—</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></div>
+            <div><div class="stat-label">Total Meters</div><div class="stat-val" id="ov-meters">—</div><div class="stat-sub" id="ov-meters-sub">—</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg></div>
+            <div><div class="stat-label">KML Points</div><div class="stat-val">320</div><div class="stat-sub">from field survey</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DASHBOARD PAGE -->
+      <div class="page" id="page-dashboard">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <p>Wells &amp; Meters summary statistics</p>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-icon navy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Total Wells</div><div class="stat-val" id="s-total-w">—</div><div class="stat-sub">in database</div></div></div>
+          <div class="stat-card"><div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Active Wells</div><div class="stat-val" id="s-active">—</div><div class="stat-sub" id="s-active-pct">—</div></div></div>
+          <div class="stat-card"><div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div>
+          <div><div class="stat-label">Non-Active Wells</div><div class="stat-val" id="s-inactive">—</div><div class="stat-sub" id="s-inactive-pct">—</div></div></div>
+          <div class="stat-card"><div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h10c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></div>
+          <div><div class="stat-label">Total Meters</div><div class="stat-val" id="s-total-m">—</div><div class="stat-sub" id="s-m-sub">—</div></div></div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-icon green"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+          <div><div class="stat-label">Maintained</div><div class="stat-val" id="s-maint">—</div><div class="stat-sub">rehab status</div></div></div>
+          <div class="stat-card"><div class="stat-icon red"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></div>
+          <div><div class="stat-label">Not Maintained</div><div class="stat-val" id="s-notmaint">—</div><div class="stat-sub">rehab status</div></div></div>
+          <div class="stat-card"><div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></div>
+          <div><div class="stat-label">Working Meters</div><div class="stat-val" id="s-mok">—</div><div class="stat-sub" id="s-mok-pct">—</div></div></div>
+          <div class="stat-card"><div class="stat-icon amber"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
+          <div><div class="stat-label">Faulty Meters</div><div class="stat-val" id="s-mbad">—</div><div class="stat-sub" id="s-mbad-pct">—</div></div></div>
+        </div>
+        <div class="summary-grid">
+          <div class="card">
+            <div class="card-title">Wells — Detailed Summary</div>
+            <table class="summary-table">
+              <thead><tr><th>Rehab Status</th><th>Active</th><th>Non-Active</th><th>Total</th></tr></thead>
+              <tbody id="dash-summary-body"></tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-title">Disconnection Reasons</div>
+            <div id="dash-reasons"></div>
+          </div>
+        </div>
+        <div class="charts-row">
+          <div class="card"><div class="card-title">Well Status</div><canvas id="ch-wells"></canvas></div>
+          <div class="card"><div class="card-title">Rehabilitation</div><canvas id="ch-rehab"></canvas></div>
+          <div class="card"><div class="card-title">Meter Status</div><canvas id="ch-meters"></canvas></div>
+        </div>
+      </div>
+
+      <!-- MAP PAGE -->
+      <div class="page" id="page-mapview">
+        <div class="page-header">
+          <h1>Well &amp; Meter Locations Map</h1>
+          <p>Click any marker to view details and open in Google Maps</p>
+        </div>
+        <div class="map-card">
+          <div class="map-header">
+            <div class="map-filters" id="main-map-filters">
+              <button class="mfbtn f-active on" onclick="toggleLayer('active',this)">
+                <span class="dot" style="background:#10B981"></span> Active Wells
+              </button>
+              <button class="mfbtn f-inactive on" onclick="toggleLayer('inactive',this)">
+                <span class="dot" style="background:#F59E0B"></span> Non-Active
+              </button>
+              <button class="mfbtn f-kml on" onclick="toggleLayer('kml',this)">
+                <span class="dot" style="background:#3B82F6"></span> KML Layer
+              </button>
+              <button class="mfbtn f-scope on" onclick="toggleLayer('scope',this)">
+                <span class="dot" style="background:#9CA3AF"></span> Out of Scope
+              </button>
+              <button class="mfbtn f-rehab" onclick="toggleLayer('rehab',this)">
+                <span class="dot" style="background:#EF4444"></span> Rehab Required
+              </button>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" onclick="mainMapFitAll()">Fit All</button>
+              <button class="btn btn-primary btn-sm" onclick="exportPDF()">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div id="main-map"></div>
+          <div class="map-legend">
+            <div class="leg-item"><span class="dot" style="background:#10B981"></span> Active Well</div>
+            <div class="leg-item"><span class="dot" style="background:#F59E0B"></span> Non-Active Well</div>
+            <div class="leg-item"><span class="dot" style="background:#3B82F6"></span> KML Meter/Point</div>
+            <div class="leg-item"><span class="dot" style="background:#EF4444"></span> Rehab Required</div>
+            <div class="leg-item"><span class="dot" style="background:#9CA3AF"></span> Out of Scope</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WELLS PAGE -->
+      <div class="page" id="page-wells">
+        <div class="page-header"><h1>Wells</h1><p>All 141 wells — search, filter, edit, export</p></div>
+        <div class="table-toolbar">
+          <input class="search-input" id="wells-search" placeholder="Search well ID, meter, reason…" oninput="renderWellsTable()">
+          <select class="filter-select" id="wells-status-filter" onchange="renderWellsTable()">
+            <option value="">All Statuses</option><option>Active</option><option>Non-Active</option>
+          </select>
+          <select class="filter-select" id="wells-rehab-filter" onchange="renderWellsTable()">
+            <option value="">All Rehab</option><option>Maintained</option><option>Not Maintained</option>
+          </select>
+          <button class="btn btn-outline" onclick="exportWellsCSV()">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> CSV
+          </button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Well ID</th><th>Lat</th><th>Lng</th><th>Status</th><th>Rehab</th>
+              <th>Dist.(m)</th><th>Depth(m)</th><th>Water(m)</th><th>Reason</th><th>Meter</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="wells-tbody"></tbody>
+          </table>
+          <div class="pagination" id="wells-pagination"></div>
+        </div>
+      </div>
+
+      <!-- METERS PAGE -->
+      <div class="page" id="page-meters">
+        <div class="page-header"><h1>Electrical Meters</h1><p>All 231 meters — search, filter, edit, export</p></div>
+        <div class="table-toolbar">
+          <input class="search-input" id="meters-search" placeholder="Search serial, well…" oninput="renderMetersTable()">
+          <select class="filter-select" id="meters-status-filter" onchange="renderMetersTable()">
+            <option value="">All Statuses</option><option>Working</option><option>Not working</option>
+          </select>
+          <button class="btn btn-outline" onclick="exportMetersCSV()">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg> CSV
+          </button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Serial Number</th><th>In V</th><th>Out V</th><th>Amp</th>
+              <th>Breaker</th><th>Status</th><th>Well</th><th>Reason</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="meters-tbody"></tbody>
+          </table>
+          <div class="pagination" id="meters-pagination"></div>
+        </div>
+      </div>
+
+      <!-- ADD RECORD PAGE -->
+      <div class="page" id="page-add">
+        <div class="page-header"><h1>Add Record</h1></div>
+        <div class="tab-switcher">
+          <button class="tab-btn active" onclick="switchAddTab('well',this)">New Well</button>
+          <button class="tab-btn" onclick="switchAddTab('meter',this)">New Meter</button>
+        </div>
+        <div class="card" style="max-width:680px">
+          <div id="add-well-form">
+            <div class="card-title">Add New Well</div>
+            <div class="form-grid">
+              <div class="form-group"><label>Well ID *</label><input id="aw-id" placeholder="e.g. 208"></div>
+              <div class="form-group"><label>Status</label><select id="aw-status"><option>Active</option><option>Non-Active</option></select></div>
+              <div class="form-group"><label>Latitude</label><input id="aw-lat" type="number" step="any" placeholder="26.xxxxx"></div>
+              <div class="form-group"><label>Longitude</label><input id="aw-lng" type="number" step="any" placeholder="37.xxxxx"></div>
+              <div class="form-group"><label>Rehab Status</label><select id="aw-rehab"><option>Maintained</option><option>Not Maintained</option></select></div>
+              <div class="form-group"><label>Distance to Meter (m)</label><input id="aw-dist" type="number" step="any"></div>
+              <div class="form-group"><label>Total Depth (m)</label><input id="aw-depth" type="number" step="any"></div>
+              <div class="form-group"><label>Water Amount (m)</label><input id="aw-water" type="number" step="any"></div>
+              <div class="form-group" style="grid-column:1/-1"><label>Connected Meter</label><input id="aw-meter"></div>
+              <div class="form-group" style="grid-column:1/-1"><label>Disconnection Reason</label><input id="aw-reason"></div>
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn btn-primary" onclick="addWell()">Save Well</button>
+              <button class="btn btn-outline" onclick="clearWellForm()">Clear</button>
+            </div>
+          </div>
+          <div id="add-meter-form" style="display:none">
+            <div class="card-title">Add New Meter</div>
+            <div class="form-grid">
+              <div class="form-group" style="grid-column:1/-1"><label>Serial Number *</label><input id="am-serial"></div>
+              <div class="form-group"><label>Input Voltage</label><input id="am-input" type="number"></div>
+              <div class="form-group"><label>Output Voltage</label><input id="am-output" type="number"></div>
+              <div class="form-group"><label>Amperes</label><input id="am-amp" type="number"></div>
+              <div class="form-group"><label>Breaker Capacity</label><input id="am-breaker" type="number"></div>
+              <div class="form-group"><label>Status</label><select id="am-status"><option>Working</option><option>Not working</option></select></div>
+              <div class="form-group"><label>Connected Well No.</label><input id="am-well"></div>
+              <div class="form-group" style="grid-column:1/-1"><label>Disconnection Reason</label><input id="am-reason"></div>
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn btn-primary" onclick="addMeter()">Save Meter</button>
+              <button class="btn btn-outline" onclick="clearMeterForm()">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UPLOAD PAGE -->
+      <div class="page" id="page-upload">
+        <div class="page-header"><h1>Upload Data</h1></div>
+        <div class="card" style="max-width:580px">
+          <div class="card-title">Upload New Excel File</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:18px">Upload an updated .xlsx file to replace all data. Must have Wells sheet and Electrical Meter &amp; Wells sheet with headers at row 4.</p>
+          <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+               ondragover="event.preventDefault();this.classList.add('dragover')"
+               ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M9 13h6m-3-3v6M3.6 19A2 2 0 0 1 2 17V7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <p><strong>Click to browse</strong> or drag &amp; drop your .xlsx file</p>
+          </div>
+          <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFileUpload(this.files[0])">
+          <div id="upload-status" style="margin-top:14px;font-size:13px;display:none"></div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /layout -->
+</div><!-- /app -->
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title" id="modal-title">Edit Record</div>
+    <div id="modal-form-content"></div>
+    <div class="form-actions" style="margin-top:18px">
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast">✓ <span id="toast-msg"></span></div>
+
+<script src="data.js"></script>
+<script src="kml_data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
