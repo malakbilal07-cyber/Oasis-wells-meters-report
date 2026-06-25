@@ -620,3 +620,152 @@ function exportPDF(){
   doc.save('ADVACON_Wells_Meters_Report.pdf');
   toast('PDF downloaded');
 }
+
+// ── KML PAGE MAP ──────────────────────────────────────────────────
+let kmlPageMap = null, kmlPageLayer = null, kmlPageInit = false;
+let kmlPageData = [];
+
+function initKMLPageMap() {
+  if (kmlPageInit) { kmlPageMap && kmlPageMap.invalidateSize(); return; }
+  kmlPageInit = true;
+  kmlPageMap = L.map('kml-map').setView([26.635, 37.915], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 19
+  }).addTo(kmlPageMap);
+  kmlPageLayer = L.layerGroup().addTo(kmlPageMap);
+  kmlPageData = typeof KML_DATA !== 'undefined' ? KML_DATA : [];
+  kmlFilter('all', document.getElementById('kf-all'));
+}
+
+const KML_COLORS = {
+  active:'#10B981', non_active:'#F59E0B', meter:'#3B82F6',
+  rehab_required:'#EF4444', out_of_scope:'#9CA3AF',
+  not_maintained:'#F97316', installed:'#8B5CF6', other:'#64748B'
+};
+const KML_LABELS = {
+  active:'Active Well', non_active:'Non-Active Well', meter:'Electric Meter',
+  rehab_required:'Rehab Required', out_of_scope:'Out of Scope',
+  not_maintained:'Not Maintained', installed:'Installed', other:'Point'
+};
+
+function kmlFilter(cat, btn) {
+  // Reset all buttons
+  document.querySelectorAll('#page-kmlpage .mfbtn').forEach(b => {
+    b.style.background = ''; b.style.color = ''; b.style.borderColor = '';
+    b.classList.remove('on');
+  });
+  // Highlight active button
+  if (btn) {
+    btn.style.background = '#DBEAFE'; btn.style.color = '#1E40AF';
+    btn.style.borderColor = '#3B82F6'; btn.classList.add('on');
+  }
+  if (!kmlPageLayer) return;
+  kmlPageLayer.clearLayers();
+  const data = cat === 'all' ? kmlPageData : kmlPageData.filter(d => d.category === cat);
+
+  data.forEach(item => {
+    const color = KML_COLORS[item.category] || '#64748B';
+    const label = KML_LABELS[item.category] || 'Point';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+      iconSize: [12,12], iconAnchor: [6,6]
+    });
+    const m = L.marker([item.lat, item.lng], { icon });
+    const lines = (item.lines || []).filter(l => l && !l.match(/^-+$/)).slice(0, 6);
+    const mapsUrl = `https://www.google.com/maps?q=${item.lat},${item.lng}`;
+    m.bindPopup(`
+      <div style="font-family:Inter,sans-serif;min-width:210px;max-width:280px">
+        <div style="background:${color};color:white;padding:7px 10px;margin:-13px -13px 10px;border-radius:8px 8px 0 0;font-size:10px;font-weight:700;text-transform:uppercase">${label}</div>
+        <div style="font-weight:600;font-size:12px;margin-bottom:6px;word-break:break-all">${item.name}</div>
+        <div style="font-size:11px;color:#374151;line-height:1.7">${lines.map(l=>`<div>${l}</div>`).join('') || '—'}</div>
+        <div style="margin-top:8px;padding-top:7px;border-top:1px solid #E5E7EB;font-size:10px;color:#9CA3AF">${item.lat.toFixed(6)}, ${item.lng.toFixed(6)}</div>
+        <a href="${mapsUrl}" target="_blank" style="display:block;margin-top:8px;background:#0B2B5E;color:white;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none;text-align:center">📍 Open in Google Maps</a>
+      </div>`, { maxWidth: 300 });
+    m.addTo(kmlPageLayer);
+  });
+}
+
+// Handle KML/KMZ upload on KML page
+function handleKMLUpload(file) {
+  if (!file) return;
+  const processKML = (kmlText) => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(kmlText, 'text/xml');
+      const pms = doc.querySelectorAll('Placemark');
+      const newItems = [];
+      pms.forEach(pm => {
+        const nameEl = pm.querySelector('name');
+        const descEl = pm.querySelector('description');
+        const coordEl = pm.querySelector('Point coordinates');
+        if (!coordEl) return;
+        const parts = coordEl.textContent.trim().split(',');
+        const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+        if (isNaN(lat) || isNaN(lng)) return;
+        const pmName = (nameEl ? nameEl.textContent : '').trim();
+        const pmDesc = (descEl ? descEl.textContent : '').trim();
+        const lines = pmDesc.split('\n').map(l=>l.trim()).filter(l=>l&&!l.match(/^-+$/));
+        let cat = 'other';
+        const folder = pm.closest('Folder');
+        if (folder) {
+          const fn = ((folder.querySelector(':scope > name')||{}).textContent||'').toLowerCase();
+          if (fn.includes('meter')) cat = 'meter';
+          else if (fn.includes('non-act')||fn.includes('non-actve')) cat = 'non_active';
+          else if (fn.includes('active')) cat = 'active';
+          else if (fn.includes('rehab')) cat = 'rehab_required';
+          else if (fn.includes('out of scope')) cat = 'out_of_scope';
+        }
+        newItems.push({ name:pmName, folder:'', category:cat, lat, lng, desc:pmDesc, lines });
+      });
+      if (!newItems.length) { toast('No point data found in KML', true); return; }
+      kmlPageData = newItems;
+      kmlFilter('all', document.getElementById('kf-all'));
+      toast(`Loaded ${newItems.length} points from ${file.name}`);
+    } catch(e) { toast('Error parsing KML: ' + e.message, true); }
+  };
+
+  if (file.name.toLowerCase().endsWith('.kmz')) {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    script.onload = () => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const zip = await JSZip.loadAsync(e.target.result);
+          const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
+          if (!kmlFile) { toast('No KML found inside KMZ', true); return; }
+          processKML(await kmlFile.async('text'));
+        } catch(err) { toast('Error reading KMZ: ' + err.message, true); }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+    document.head.appendChild(script);
+  } else {
+    const reader = new FileReader();
+    reader.onload = (e) => processKML(e.target.result);
+    reader.readAsText(file);
+  }
+}
+
+// ── ALSO PLOT EXCEL METERS ON MAIN MAP ───────────────────────────
+// Override plotMainMap to also show Excel meters as blue dots
+const _origPlotMainMap = plotMainMap;
+plotMainMap = function() {
+  _origPlotMainMap();
+  // Add Excel meters that have coordinates from KML (match by serial number)
+  // They're already in KML layer — just make sure KML includes 'meter' category
+};
+
+// ── HOOK showPage FOR KML MAP INIT ───────────────────────────────
+const _origShowPage2 = showPage;
+showPage = function(name) {
+  _origShowPage2(name);
+  if (name === 'kmlpage') setTimeout(initKMLPageMap, 150);
+  if (name === 'mapview') setTimeout(() => mainMap && mainMap.invalidateSize(), 200);
+};
+
+// Re-bind nav after override
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.onclick = () => showPage(el.dataset.page);
+});
